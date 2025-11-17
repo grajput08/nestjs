@@ -1,60 +1,103 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
-import { User } from './entities/user.entity';
+import { SignupDto } from './dto/signup.dto';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
-  private readonly users: User[] = [
-    {
-      id: 1,
-      username: 'admin',
-      password: 'admin123',
-      name: 'Admin User',
-      role: 'admin',
-    },
-    {
-      id: 2,
-      username: 'user',
-      password: 'user123',
-      name: 'Standard User',
-      role: 'user',
-    },
-  ];
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
-  login(loginDto: LoginDto) {
+  async signup(signupDto: SignupDto) {
+    if (!signupDto.username?.trim() || !signupDto.password?.trim()) {
+      throw new BadRequestException('Username and password are required');
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { username: signupDto.username.trim() },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Username already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(signupDto.password, 10);
+
+    const newUser = await this.prisma.user.create({
+      data: {
+        username: signupDto.username.trim(),
+        password: hashedPassword,
+        name: signupDto.name?.trim() || signupDto.username.trim(),
+      },
+    });
+
+    const payload = this.buildPayload(newUser);
+
+    return {
+      message: 'Signup successful',
+      user: payload.user,
+      token: await this.jwtService.signAsync(payload.tokenPayload),
+    };
+  }
+
+  async login(loginDto: LoginDto) {
     if (!loginDto.username?.trim() || !loginDto.password) {
       throw new BadRequestException('Username and password are required');
     }
 
-    const matchedUser = this.users.find(
-      (user) => user.username === loginDto.username,
-    );
+    const matchedUser = await this.prisma.user.findUnique({
+      where: { username: loginDto.username.trim() },
+    });
 
-    if (!matchedUser || matchedUser.password !== loginDto.password) {
+    if (!matchedUser) {
       throw new UnauthorizedException('Invalid username or password');
     }
 
-    const { password, ...safeUser } = matchedUser;
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      matchedUser.password,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    const payload = this.buildPayload(matchedUser);
 
     return {
       message: 'Login successful',
-      user: safeUser,
-      token: this.buildToken(matchedUser),
+      user: payload.user,
+      token: await this.jwtService.signAsync(payload.tokenPayload),
     };
   }
 
-  private buildToken(user: User): string {
-    const payload = {
+  private buildPayload(user: {
+    id: number;
+    username: string;
+    role: string;
+    name?: string | null;
+  }) {
+    const tokenPayload = {
       sub: user.id,
       username: user.username,
       role: user.role,
-      iat: Date.now(),
+      name: user.name,
     };
-    return Buffer.from(JSON.stringify(payload)).toString('base64url');
+
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+    };
+
+    return { tokenPayload, user: safeUser };
   }
 }
