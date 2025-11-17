@@ -17,22 +17,22 @@ export class TodoController {
   constructor(private readonly todoService: TodoService) {}
 
   @Post()
-  create(@Body() createTodoDto: CreateTodoDto) {
+  async create(@Body() createTodoDto: CreateTodoDto) {
     return this.todoService.create(createTodoDto);
   }
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.todoService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.todoService.findOne(id);
   }
 
   @Patch(':id')
-  update(
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateTodoDto: UpdateTodoDto,
   ) {
@@ -40,8 +40,8 @@ export class TodoController {
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    this.todoService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    await this.todoService.remove(id);
     return { message: 'Todo deleted successfully' };
   }
 }
