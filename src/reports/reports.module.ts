@@ -10,5 +10,6 @@ import { RouteInfoInterceptor } from '../common/interceptors/route-info.intercep
   imports: [TodoModule, AuthModule],
   controllers: [ReportsController],
   providers: [ReportsService, TodoStatsProviderFactory, RouteInfoInterceptor],
+  exports: [ReportsService],
 })
 export class ReportsModule {}
